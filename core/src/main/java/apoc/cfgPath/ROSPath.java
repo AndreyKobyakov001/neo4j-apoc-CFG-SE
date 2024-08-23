@@ -5,13 +5,14 @@ import apoc.util.Util;
 import org.neo4j.graphalgo.BasicEvaluationContext;
 import org.neo4j.graphdb.GraphDatabaseService;
 import org.neo4j.graphdb.*;
-import org.neo4j.graphdb.Path;
 import org.neo4j.graphdb.Transaction;
 import org.neo4j.procedure.Context;
 import org.neo4j.procedure.Description;
 import org.neo4j.procedure.Name;
 import org.neo4j.procedure.UserFunction;
+import org.w3c.dom.Node;
 
+import java.nio.file.Path;
 import java.util.*;
 
 public class ROSPath {
@@ -323,33 +324,56 @@ public class ROSPath {
     public boolean getCFGPath(BasicCandidatePath path, HashMap<String, CFGSetting> config, boolean backward) {
         // in case there is only one edge in path, then the cfg path always passes
         if (path.getPathSize() < 2) {
-            return true;
+            return true; //automatically return true in the case that the path is a singleton; 
+            //it is a single node
         }
 
         // get last edge and the CFG node related to the second last edge
+        //the last edge may be the last or second last, depending on the direction of control/data flow
         Relationship condEdge = (backward) ? path.getSecondLastEdge() : path.getLastEdge();
         Relationship lastEdge = path.getLastEdge();
         HashSet<Node> prevCFGs = path.getValidCFGs(); // nodes of subpath
+        //this is the previous path. At this point, we have generated roughly the following:
+        //Node1--Node2--Node3 ... Node(N-1)~~Node(N), 
+        //with the next node being N, and being one of some number, essentially spiderwebbing out, as
+        //it were, with potential valid next paths being found.
 
         // create CFG shortest path object
+        //We have the shortest path possible, based on the end goal. 
         CFGShortestPath shortestPath = new CFGShortestPath(
                 new BasicEvaluationContext(tx, db),
                 (int) Integer.MAX_VALUE,
                 CFGValidationHelper.buildPathExpander("nextCFGBlock>"));
 
         // get the corresponding CFG node for last edge in path
-        HashSet<List<Node>> curCFGs = CFGValidationHelper.getConnectionNodesAll(lastEdge, config); // nodes of new edge
+        //We know that the path between N-1 and N is of a certain type, and so find the
+        //type of node N-1, which eliminates impossible types of N.  
+        HashSet<List<Node>> curCFGs = CFGValidationHelper.getConnectionNodesAll(lastEdge, config); 
+        // nodes of new edge. Here, we can elegantly modify it to remove nodes that
+        //violate our concerned property: modifying the dataflow queries to avoid 
+        //imprecision due to assignments in the same CFG block. A CFG block can only have one
+        // assignment, which we will determine by ensuring that the LINE_NUMBER property for 
+        //given assignments is distinct. 
+        /*
+         * int func() {
+            int x;
+            x = y;            // y - varWrite -> x
+            x = z;        // z - varWrite -> x
+        } -- at present, this fails, as the code attempts to establish 2 varWrites to x. \
+            This is not correct.
+         */
         HashSet<Node> acceptedNewCFG = new HashSet<>();
+        //We hash the accepted new possibilities. 
 
         // attempt to find a directed path between CFG nodes from path up to second last edge to last edge
-        for (Node prevCFG : prevCFGs) {   // nodes of subpath
-            for (List<Node> curCFG : curCFGs) {   // nodes of new edge
+        for (Node prevCFG : prevCFGs) {   // for each of the nodes of subpath
+            for (List<Node> curCFG : curCFGs) {   // for each possible node of new edge
                 // Node curNode = prevCFG.get(0);
-                Node startCFG = (backward) ? curCFG.get(1) : prevCFG;
-                Node dstNode = (backward) ? prevCFG : curCFG.get(0);
-                Path cfgPath = shortestPath.findSinglePath(startCFG, dstNode, condEdge);
+                Node startCFG = (backward) ? curCFG.get(1) : prevCFG; //we define the start and
+                Node dstNode = (backward) ? prevCFG : curCFG.get(0);// destination nodes
+                Path cfgPath = shortestPath.findSinglePath(startCFG, dstNode, condEdge); //and then find the single shortest path
                 if (cfgPath != null) { // if found, then we add to accepted CFG nodes
-                    acceptedNewCFG.add(backward ? curCFG.get(0) : curCFG.get(1));
+                    acceptedNewCFG.add(backward ? curCFG.get(0) : curCFG.get(1)); //and this is where we add the last (or second-last) node, as it forms a valid path
                 }
             }
         }
