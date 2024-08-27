@@ -29,8 +29,8 @@ public class ROSPath {
         // configuration graph variables
         Node startNode = null;
         Relationship startEdge = null;
-        Node endNode = (Node) config.getOrDefault("endNode", null);
-        Relationship endEdge = (Relationship) config.getOrDefault("endEdge", null);
+        Node endNode = (Node) config.getOrDefault("endN", null);
+        Relationship endEdge = (Relationship) config.getOrDefault("endE", null);
 
         // process starting points - has to be either a starting node or edge
         if (start == null) {
