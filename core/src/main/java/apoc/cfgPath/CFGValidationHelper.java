@@ -8,9 +8,7 @@ import org.neo4j.graphalgo.PathFinder;
 import org.neo4j.graphdb.*;
 import org.neo4j.internal.helpers.collection.Pair;
 import org.neo4j.procedure.Context;
-import org.w3c.dom.Node;
 
-import java.nio.file.Path;
 import java.util.*;
 
 public class CFGValidationHelper {
@@ -32,10 +30,10 @@ public class CFGValidationHelper {
     // helper function: return start and end CFG nodes along with the connections
     //Here, for each given connection, if it be of type retWrite or varWrite, we add our modification
     //to make sure that line numbers are distinct
-    //To ensure correct, sequential assignment in a linear fashion, 
+    //To ensure correct, sequential assignment in a linear fashion,
     // we can keep track of the highest node so far encountered
     // and discard any assignments that are not STRICTLY GREATER (and thus L(N) > L(N - 1), necessarily)
-    //so all nodes less than or equal can be discarded. 
+    //so all nodes less than or equal can be discarded.
     // return: a hashset of CFG nodes
     public static HashSet<List<Node>> getConnectionNodesAll(Relationship edge,
                                                             HashMap<String,
@@ -60,12 +58,12 @@ public class CFGValidationHelper {
         // get the CFG nodes in iterable
         Iterable<Relationship> srcEdges = edge.getStartNode().getRelationships(Direction.OUTGOING, sourceType);
         Iterable<Relationship> dstEdges = edge.getEndNode().getRelationships(Direction.OUTGOING, destinationType);
-           
+
         //mapping for latest assignment of a given variable
-        //we have assumed, rather naively, that exceptional conditions such as conditionals, 
-        //nested blocks, loops, and switch statements have been dealt with otherwise, if not, 
-        //this is a TODO for later. Race conditions from concurrency, as well as complications 
-        //arising from variable scope (globals, or pointers) could be unresolved also. 
+        //we have assumed, rather naively, that exceptional conditions such as conditionals,
+        //nested blocks, loops, and switch statements have been dealt with otherwise, if not,
+        //this is a TODO for later. Race conditions from concurrency, as well as complications
+        //arising from variable scope (globals, or pointers) could be unresolved also.
         HashMap<String, Integer> latestAssignmentLine = new HashMap<>();
 
         // create srcEdges Hashset
@@ -79,22 +77,20 @@ public class CFGValidationHelper {
         for (Relationship srcEdge : srcEdges) {
             Node endSrcNode = srcEdge.getEndNode();
             String varType = (String) endSrcNode.getProperty(":TYPE");
-        
-            // We check the line number for varWriteSource and retWriteDestination nodes only
+
             if ("varWriteSource".equals(varType) || "retWriteDestination".equals(varType)) {
                 int lineNumber = (int) srcEdge.getProperty("LINE_NUMBER");
-        
-                // We ensure that this line number is strictly greater than anything previously assigned. 
+
                 if (!latestAssignmentLine.containsKey(varType) || latestAssignmentLine.get(varType) < lineNumber) {
                     latestAssignmentLine.put(varType, lineNumber);
                     relatedNodes.add(List.of(endSrcNode, endSrcNode));
                 }
-            } else {
-                // For other types, just add the node without any checks
+            }
+            else {
                 relatedNodes.add(List.of(endSrcNode, endSrcNode));
             }
-        }        
-    
+        }
+
 
         // handle length + attribute
         int i = 0;
